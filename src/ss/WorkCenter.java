@@ -22,7 +22,8 @@ public class WorkCenter {
 	private Queue<Page> article_pages = new ArrayBlockingQueue<Page>(5000);
 	private Queue<Article> articles = new ArrayBlockingQueue<Article>(5000);
 
-	private Queue<Page> article_pages_thread = new ArrayBlockingQueue<Page>(5000);
+	// private Queue<Page> article_pages_thread = new
+	// ArrayBlockingQueue<Page>(5000);
 
 	ExecutorService pool = Executors.newFixedThreadPool(5);
 
@@ -90,27 +91,46 @@ public class WorkCenter {
 	}
 
 	public void OnStarted() {
+		class AddPageThread extends Thread {
+			Queue<Page> article_pages_thread = new ArrayBlockingQueue<Page>(5000);
+			public AddPageThread(Queue<Page> thequeue) {
+				article_pages_thread = thequeue;
+			}
+			public void run() {
+				for (Page page : article_pages_thread) {
+					Article newArticle = GetArticle(page);
+					articles.add(newArticle);
+				}
+			};
+		}
+
 		class AnalysisPage extends Thread {
 			int miss_count = 0;
+
 			public void run() {
 				while (PageFlag) {
 					synchronized (article_pages) {
 						if (article_pages.size() == 0) {
 							miss_count++;
 							if (miss_count == 20) {
+								System.out.println("=======");
+								System.out.println("no more page");
+								System.out.println("=======");
+
 								PageFlag = false;
 								ArticleFlag = false;
+								pool.shutdown();
 							}
-						}
-						while (article_pages.size() != 0) {
-							article_pages_thread.add(article_pages.poll());
+						} else {
+							Queue<Page> article_pages_thread = new ArrayBlockingQueue<Page>(5000);
+							while (article_pages.size() != 0) {
+								article_pages_thread.add(article_pages.poll());
+							}
+							pool.execute(new AddPageThread(article_pages_thread));
 						}
 					}
-					for (Page page : article_pages_thread) {
-						Article newArticle = GetArticle(page);
-						articles.add(newArticle);
-					}
-					article_pages_thread.clear();
+
+					// article_pages_thread.clear();
 					try {
 						Thread.sleep(1000);
 					} catch (InterruptedException e) {
@@ -130,6 +150,7 @@ public class WorkCenter {
 							SQLiteHelper.mySqLiteHelper.Insert(cur_article);
 						}
 					}
+			
 					try {
 						Thread.sleep(1000);
 					} catch (InterruptedException e) {
@@ -154,8 +175,9 @@ public class WorkCenter {
 				sbcontent.append(s.trim());
 			}
 		}
-		List<String> tags = page.getHtml().xpath("//div[@class='article_l']/span[@class='link_categories'").$("a","text").all();
-		return new Article(cur_user, cur_title, sbcontent.toString(), page.getUrl().toString(),tags.toString());
+		List<String> tags = page.getHtml().xpath("//div[@class='article_l']/span[@class='link_categories'")
+				.$("a", "text").all();
+		return new Article(cur_user, cur_title, sbcontent.toString(), page.getUrl().toString(), tags.toString());
 
 	}
 
